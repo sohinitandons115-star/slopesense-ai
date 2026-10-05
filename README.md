@@ -1,105 +1,103 @@
-# slopesense-ai — NER Landslide Risk Dashboard Developer Handoff
+# SlopeSense AI
 
-This ZIP contains a prototype Random Forest landslide-risk dashboard and the
-integration contract needed to replace its precompiled terrain/NDVI data with
-Google Earth Engine (GEE) exports.
+SlopeSense AI is a landslide-risk monitoring and emergency-response prototype for communities and disaster-response teams in Northeast India. It combines a Streamlit dashboard, a FastAPI backend, a trained Random Forest model, geospatial visualizations, and role-based response workflows.
 
-## Handoff contents
+> **Project status:** The core dashboard and API workflows are implemented and covered by automated tests. This is a development/demo prototype, not an operational early-warning system. Some environmental inputs and notification delivery are simulated or approximate; see [Current capabilities and limitations](#current-capabilities-and-limitations).
 
-- `app.py`: Streamlit dashboard and risk scoring workflow.
-- `models/`: trained model and feature-column order.
-- `data/`: prototype training and monitoring CSVs.
-- `scripts/train_model.py`: retrains the model.
-- `scripts/gee_export_features.py`: optional GEE terrain/NDVI export template.
-- `requirements-gee.txt`: optional dependency for the GEE export script.
-- `package_project.ps1`: creates the developer handoff ZIP.
+## What works today
 
-## Model input contract
+- **Role-based dashboard:** citizen, volunteer, authority, and admin views.
+- **Risk assessment:** loads the included Random Forest model and evaluates terrain, rainfall, vegetation, and river-distance features.
+- **Monitoring map:** displays configured Northeast India monitoring locations and risk information.
+- **Community response workflows:** registration and approval, hazard reports, SOS responses, alert management, volunteer assignment, and field verification.
+- **REST API:** FastAPI endpoints for authentication, risk predictions, alerts, reports, volunteer operations, and authority monitoring.
+- **Local development storage:** SQLite by default; a PostgreSQL URL can be supplied through configuration.
+- **Notification integration:** Twilio SMS/voice support is configurable; mock mode is enabled by default.
 
-The model must receive these columns in this order:
+## Current capabilities and limitations
 
-```text
-slope, aspect, curvature, rainfall_mm, cumulative_rainfall_30d,
-ndvi_trend, ndvi_drop, distance_to_river
-```
+- **Terrain and vegetation data:** Monitoring locations and their terrain/NDVI features are bundled in the application. Custom-location terrain and vegetation values are approximations. Google Earth Engine is not currently queried for live satellite updates by the app.
+- **Rainfall:** The app attempts to retrieve precipitation from Open-Meteo. If the request is unavailable, it uses generated fallback values. The current implementation requests a limited recent hourly window, so its displayed cumulative value should not be treated as verified 30-day rainfall.
+- **Notifications:** SMS and IVR delivery run in mock mode unless valid Twilio credentials are supplied and mock mode is disabled. Do not use the demo configuration to send real emergency alerts.
+- **Model and training data:** The included model and data are for prototyping. The training dataset includes synthetic negative examples, so test accuracy is not evidence of real-world predictive performance. Validate with representative, independently verified, geographically and temporally separated data before making operational claims.
+- **Safety:** Predictions and recommendations are experimental and must not replace official warnings, field assessment, or emergency services.
 
-GEE supplies terrain and NDVI features. Open-Meteo supplies rainfall at runtime.
-The application currently reads terrain/NDVI from `data/monitoring_points.csv`.
-After a GEE export, validate the CSV and replace those feature columns while
-preserving `location_id`, `latitude`, and `longitude`.
+## Requirements
 
-## What was tested here (in a restricted sandbox)
-- ✅ Model trains successfully (train_model.py)
-- ✅ Streamlit app launches and serves (HTTP 200 confirmed)
-- ✅ Risk scoring pipeline runs end-to-end
-- ✅ Offline fallback for rainfall API confirmed working (sandbox blocks
-     open-meteo.com; on your machine with normal internet, it will use LIVE data)
-- ⚠️ NOT tested here: actual live Open-Meteo response (blocked in sandbox),
-     Google Earth Engine integration (not built into this version — see below)
+- Python 3.10 or newer
+- `pip`
 
-## Before you run this on your machine
+The trained model artifacts are included, so model training is not required to start the app.
 
-1. Install dependencies:
-   pip install -r requirements.txt
+## Run locally
 
-2. Train the model (creates models/rf_model.pkl):
-   python scripts/train_model.py
-
-3. Run the app:
-   streamlit run app.py
-
-4. Open the browser link it gives you (usually http://localhost:8501)
-
-## Optional GEE integration
-
-Install the additional dependency only on the machine that will run GEE:
-
-```bash
-python -m pip install -r requirements-gee.txt
-python scripts/gee_export_features.py --project YOUR_GCP_PROJECT_ID
-```
-
-The first run opens Earth Engine authentication. The Google Cloud project must
-have Earth Engine enabled. The script exports a CSV to Google Drive; it does not
-place credentials in this project or download the file automatically.
-
-Before connecting the export to the app, verify that the CSV contains numeric
-values for `slope`, `aspect`, `curvature`, `ndvi_trend`, `ndvi_drop`, and
-`distance_to_river`. Keep `rainfall_mm` and `cumulative_rainfall_30d` for the
-runtime Open-Meteo step. A developer may need to compute `distance_to_river`
-from a verified hydrography dataset if it is not present in the export.
-
-## Creating the ZIP for handoff
-
-From the project directory, run PowerShell:
+Create and activate a virtual environment, then install dependencies:
 
 ```powershell
-.\package_project.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-This creates `NER_Landslide_Project-developer-handoff.zip` beside the project
-folder. Do not include GEE service-account keys, `.env` files, or personal
-credentials in the ZIP.
+On macOS or Linux, activate the environment with:
 
-## IMPORTANT — things to fix before final presentation
+```bash
+source .venv/bin/activate
+```
 
-1. **Negative points are SYNTHETIC** (randomly generated, not real verified
-   safe locations). Replace data/dima_hasao_landslides_balanced.csv's NEG*
-   rows with real QGIS/GEE-verified safe points before claiming real accuracy.
+Start the Streamlit dashboard:
 
-2. **Do not present the current 100% test accuracy as model skill.** It is a
-   prototype holdout result caused by the clean separation between the real
-   landslide records and synthetic negatives, not a real-world validation score.
-   Replace the negatives first, then evaluate with a geographically and
-   temporally representative validation design and report those results.
+```bash
+streamlit run app.py
+```
 
-3. **GEE satellite live-refresh is NOT wired into app.py yet** — this version
-   uses pre-computed terrain/NDVI from your dataset (the "slow track" is
-   simulated as static, not actually re-fetched every few days). To add real
-   GEE integration, see the separate satellite_update.py pattern discussed
-   earlier — this requires `earthengine-api` + a GEE account, and must be run
-   on a machine with GEE access (not tested in this sandbox).
+The dashboard is normally available at <http://localhost:8501>.
 
-4. **Twilio alerts are simulated only** (shown as warning boxes in the UI,
-   not actual SMS/calls). Wire in real Twilio credentials via .env if you want
-   live alert sending for the demo.
+To run the API separately in another terminal:
+
+```bash
+uvicorn backend.main:app --reload
+```
+
+The API is normally available at <http://localhost:8000>; interactive documentation is at <http://localhost:8000/docs>, with ReDoc at <http://localhost:8000/redoc>.
+
+## Configuration
+
+The app uses SQLite for local development by default and creates its database on startup. Optional settings can be supplied in a local `.env` file; `.env` is ignored by Git.
+
+For local setup, start from the template:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Before any shared or production deployment:
+
+- Set a unique, securely generated `JWT_SECRET_KEY`.
+- Configure an appropriate `DATABASE_URL`.
+- Keep Twilio mock mode enabled unless you have deliberately configured and tested real delivery.
+- Never commit `.env`, service-account keys, or personal credentials.
+
+## Tests
+
+Run the automated API and workflow tests from the project root:
+
+```bash
+python -m pytest tests/ -v
+```
+
+The tests cover API health, authentication, risk prediction, alert and report workflows, location filtering, volunteer dispatch, approval, and field verification.
+
+## Repository layout
+
+```text
+app.py                 Streamlit dashboard
+backend/               FastAPI app, API routes, models, and services
+data/                  Prototype datasets and monitoring data
+models/                Trained model and feature-column artifacts
+scripts/               Model training and optional GEE export utilities
+tests/                 API and workflow tests
+docs/                  API, schema, product, and walkthrough documentation
+```
+
+See the files in [`docs/`](./docs/) for the API specification, database schema, product requirements, user flows, and project walkthrough.
